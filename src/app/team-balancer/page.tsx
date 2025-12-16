@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Shuffle, Users, Star, CheckSquare, Square, Trophy } from "lucide-react"
+import { Shuffle, Users, Star, CheckSquare, Square, Trophy, Loader2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface Player {
@@ -12,6 +12,8 @@ interface Player {
   name: string
   position: string
   skillPoints: number
+  image?: string
+  createdAt?: number
 }
 
 interface Team {
@@ -26,10 +28,13 @@ export default function TeamBalancerPage() {
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set())
   const [teams, setTeams] = useState<Team[]>([])
   const [numberOfTeams, setNumberOfTeams] = useState<2 | 3>(2)
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(true)
+  const [isBalancing, setIsBalancing] = useState(false)
 
   useEffect(() => {
     const loadPlayers = async () => {
       try {
+        setIsLoadingPlayers(true)
         const response = await fetch('/api/players');
         if (response.ok) {
           const playersData = await response.json();
@@ -50,6 +55,8 @@ export default function TeamBalancerPage() {
         if (stored) {
           setPlayers(JSON.parse(stored));
         }
+      } finally {
+        setIsLoadingPlayers(false)
       }
     };
     
@@ -97,126 +104,146 @@ export default function TeamBalancerPage() {
     const minPlayers = numberOfTeams === 2 ? 2 : 3
     if (selected.length < minPlayers) return
 
-    // Kiểm tra trùng cầu thủ trong danh sách đã chọn
-    const playerIds = selected.map(p => p.id)
-    const uniqueIds = new Set(playerIds)
-    if (playerIds.length !== uniqueIds.size) {
-      alert("Có cầu thủ bị trùng trong danh sách. Vui lòng kiểm tra lại.")
-      return
-    }
+    setIsBalancing(true)
 
-    // Tách thủ môn và cầu thủ khác
-    const goalkeepers = selected.filter(isGoalkeeper)
-    const otherPlayers = selected.filter((p) => !isGoalkeeper(p))
-
-    // Kiểm tra có đủ thủ môn không
-    if (goalkeepers.length < numberOfTeams) {
-      alert(`Cần ít nhất ${numberOfTeams} thủ môn để chia ${numberOfTeams} đội. Hiện có ${goalkeepers.length} thủ môn.`)
-      return
-    }
-
-    // Sắp xếp thủ môn và cầu thủ khác theo điểm kỹ năng (giảm dần)
-    const sortedGoalkeepers = [...goalkeepers].sort((a, b) => b.skillPoints - a.skillPoints)
-    const sortedOtherPlayers = [...otherPlayers].sort((a, b) => b.skillPoints - a.skillPoints)
-
-    // Khởi tạo các đội
-    const teamNames = numberOfTeams === 2 ? ["Đội A", "Đội B"] : ["Đội A", "Đội B", "Đội C"]
-    const newTeams: Team[] = teamNames.map((name) => ({
-      name,
-      players: [],
-      totalPoints: 0,
-    }))
-
-    // Set để theo dõi cầu thủ đã được phân phối (đảm bảo không trùng)
-    const distributedPlayerIds = new Set<string>()
-
-    // Phân phối thủ môn trước (mỗi đội 1 thủ môn)
-    sortedGoalkeepers.forEach((gk, index) => {
-      if (index < numberOfTeams) {
-        if (distributedPlayerIds.has(gk.id)) {
-          console.error(`Cầu thủ ${gk.name} đã được phân phối trước đó!`)
-          return
-        }
-        newTeams[index].players.push(gk)
-        newTeams[index].totalPoints += gk.skillPoints
-        distributedPlayerIds.add(gk.id)
-      }
-    })
-
-    // Phân phối các cầu thủ còn lại (bao gồm thủ môn thừa nếu có)
-    const remainingGoalkeepers = sortedGoalkeepers.slice(numberOfTeams)
-    const allRemainingPlayers = [...remainingGoalkeepers, ...sortedOtherPlayers]
-
-    // Phân phối theo thuật toán cân bằng điểm
-    allRemainingPlayers.forEach((player) => {
-      // Kiểm tra cầu thủ chưa được phân phối
-      if (distributedPlayerIds.has(player.id)) {
-        console.error(`Cầu thủ ${player.name} đã được phân phối trước đó!`)
+    try {
+      // Kiểm tra trùng cầu thủ trong danh sách đã chọn
+      const playerIds = selected.map(p => p.id)
+      const uniqueIds = new Set(playerIds)
+      if (playerIds.length !== uniqueIds.size) {
+        alert("Có cầu thủ bị trùng trong danh sách. Vui lòng kiểm tra lại.")
         return
       }
 
-      // Tìm đội có điểm thấp nhất
-      const teamWithLowestPoints = newTeams.reduce((min, team) =>
-        team.totalPoints < min.totalPoints ? team : min
-      )
-      teamWithLowestPoints.players.push(player)
-      teamWithLowestPoints.totalPoints += player.skillPoints
-      distributedPlayerIds.add(player.id)
-    })
+      // Tách thủ môn và cầu thủ khác
+      const goalkeepers = selected.filter(isGoalkeeper)
+      const otherPlayers = selected.filter((p) => !isGoalkeeper(p))
 
-    // Kiểm tra lại để đảm bảo không có cầu thủ trùng giữa các đội
-    const allDistributedIds: string[] = []
-    newTeams.forEach(team => {
-      team.players.forEach(player => {
-        if (allDistributedIds.includes(player.id)) {
-          console.error(`Cầu thủ ${player.name} (ID: ${player.id}) xuất hiện trong nhiều đội!`)
-        }
-        allDistributedIds.push(player.id)
-      })
-    })
+      // Sắp xếp thủ môn và cầu thủ khác theo điểm kỹ năng (giảm dần)
+      const sortedGoalkeepers = [...goalkeepers].sort((a, b) => b.skillPoints - a.skillPoints)
+      const sortedOtherPlayers = [...otherPlayers].sort((a, b) => b.skillPoints - a.skillPoints)
+      const shouldBalanceGoalkeepers = goalkeepers.length >= numberOfTeams
 
-    const uniqueDistributedIds = new Set(allDistributedIds)
-    if (allDistributedIds.length !== uniqueDistributedIds.size) {
-      alert("Có lỗi: Cầu thủ bị trùng giữa các đội. Vui lòng thử lại.")
-      return
-    }
+      // Khởi tạo các đội
+      const teamNames = numberOfTeams === 2 ? ["Đội A", "Đội B"] : ["Đội A", "Đội B", "Đội C"]
+      const newTeams: Team[] = teamNames.map((name) => ({
+        name,
+        players: [],
+        totalPoints: 0,
+      }))
 
-    setTeams(newTeams)
+      // Set để theo dõi cầu thủ đã được phân phối (đảm bảo không trùng)
+      const distributedPlayerIds = new Set<string>()
 
-    // Lưu đội vào localStorage để trang matches có thể sử dụng
-    localStorage.setItem("football-teams", JSON.stringify(newTeams))
-
-    // Lưu đội vào Google Sheets
-    try {
-      const response = await fetch('/api/teams', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newTeams),
-      });
-      
-      if (response.ok) {
-        console.log('Teams saved to Google Sheets successfully');
-      } else {
-        console.error('Failed to save teams to Google Sheets');
+      // Phân phối thủ môn trước (mỗi đội 1 thủ môn) khi có đủ
+      if (shouldBalanceGoalkeepers) {
+        sortedGoalkeepers.slice(0, numberOfTeams).forEach((gk, index) => {
+          if (distributedPlayerIds.has(gk.id)) {
+            console.error(`Cầu thủ ${gk.name} đã được phân phối trước đó!`)
+            return
+          }
+          newTeams[index].players.push(gk)
+          newTeams[index].totalPoints += gk.skillPoints
+          distributedPlayerIds.add(gk.id)
+        })
       }
-    } catch (error) {
-      console.error('Error saving teams to Google Sheets:', error);
+
+      // Phân phối các cầu thủ còn lại (bao gồm thủ môn thừa nếu có)
+      const remainingGoalkeepers = shouldBalanceGoalkeepers
+        ? sortedGoalkeepers.slice(numberOfTeams)
+        : sortedGoalkeepers
+      const allRemainingPlayers = [...remainingGoalkeepers, ...sortedOtherPlayers]
+
+      // Phân phối theo thuật toán cân bằng điểm
+      allRemainingPlayers.forEach((player) => {
+        // Kiểm tra cầu thủ chưa được phân phối
+        if (distributedPlayerIds.has(player.id)) {
+          console.error(`Cầu thủ ${player.name} đã được phân phối trước đó!`)
+          return
+        }
+
+        // Tìm đội có điểm thấp nhất
+        const teamWithLowestPoints = newTeams.reduce((min, team) =>
+          team.totalPoints < min.totalPoints ? team : min
+        )
+        teamWithLowestPoints.players.push(player)
+        teamWithLowestPoints.totalPoints += player.skillPoints
+        distributedPlayerIds.add(player.id)
+      })
+
+      // Kiểm tra lại để đảm bảo không có cầu thủ trùng giữa các đội
+      const allDistributedIds: string[] = []
+      newTeams.forEach(team => {
+        team.players.forEach(player => {
+          if (allDistributedIds.includes(player.id)) {
+            console.error(`Cầu thủ ${player.name} (ID: ${player.id}) xuất hiện trong nhiều đội!`)
+          }
+          allDistributedIds.push(player.id)
+        })
+      })
+
+      const uniqueDistributedIds = new Set(allDistributedIds)
+      if (allDistributedIds.length !== uniqueDistributedIds.size) {
+        alert("Có lỗi: Cầu thủ bị trùng giữa các đội. Vui lòng thử lại.")
+        return
+      }
+
+      setTeams(newTeams)
+
+      // Lưu đội vào Google Sheets
+      try {
+        const response = await fetch('/api/teams', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newTeams),
+        });
+        
+        if (response.ok) {
+          console.log('Teams saved to Google Sheets successfully');
+        } else {
+          console.error('Failed to save teams to Google Sheets');
+        }
+      } catch (error) {
+        console.error('Error saving teams to Google Sheets:', error);
+      }
+
+      await createMatchFromTeams(newTeams)
+    } finally {
+      setIsBalancing(false)
     }
   }
 
-  const createMatchFromTeams = async () => {
-    if (teams.length < 2) {
+  const MAX_LOCAL_MATCHES = 50
+
+  const sanitizePlayerForMatch = (player: Player): Player => ({
+    id: player.id,
+    name: player.name,
+    position: player.position,
+    skillPoints: player.skillPoints,
+    createdAt: player.createdAt || Date.now(),
+  })
+
+  const sanitizeMatchForStorage = (match: any) => ({
+    ...match,
+    team1Players: match.team1Players?.map(sanitizePlayerForMatch),
+    team2Players: match.team2Players?.map(sanitizePlayerForMatch),
+  })
+
+  const createMatchFromTeams = async (sourceTeams?: Team[]) => {
+    const activeTeams = sourceTeams || teams
+
+    if (activeTeams.length < 2) {
       alert("Cần ít nhất 2 đội để tạo trận đấu")
       return
     }
 
     // Chỉ tạo match cho 2 đội đầu tiên nếu có 3 đội
-    const team1 = teams[0]
-    const team2 = teams[1]
+    const team1 = activeTeams[0]
+    const team2 = activeTeams[1]
 
-    const match = {
+    const match = sanitizeMatchForStorage({
       id: Date.now().toString(),
       team1: team1.name,
       team2: team2.name,
@@ -226,12 +253,16 @@ export default function TeamBalancerPage() {
       team1Players: team1.players,
       team2Players: team2.players,
       createdAt: Date.now(),
-    }
+    })
 
     // Lưu match vào localStorage trước
     const existingMatches = JSON.parse(localStorage.getItem("football-matches") || "[]")
-    const updatedMatches = [match, ...existingMatches]
-    localStorage.setItem("football-matches", JSON.stringify(updatedMatches))
+    const updatedMatches = [match, ...existingMatches].map(sanitizeMatchForStorage).slice(0, MAX_LOCAL_MATCHES)
+    try {
+      localStorage.setItem("football-matches", JSON.stringify(updatedMatches))
+    } catch (error) {
+      console.warn("Không thể lưu match vào localStorage:", error)
+    }
 
     // Lưu vào Google Sheets
     try {
@@ -271,11 +302,11 @@ export default function TeamBalancerPage() {
 
         <div className="space-y-8">
           {/* Player Selection */}
-          <Card className="p-5 sm:p-6">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-2xl font-bold">Chọn cầu thủ</h2>
-              {players.length > 0 && (
-                <Button
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-2xl font-bold">Chọn cầu thủ</h2>
+            {players.length > 0 && (
+              <Button
                   variant="outline"
                   size="sm"
                   onClick={toggleSelectAll}
@@ -293,13 +324,19 @@ export default function TeamBalancerPage() {
                     </>
                   )}
                 </Button>
-              )}
+            )}
+          </div>
+          {isLoadingPlayers && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Đang tải danh sách cầu thủ, vui lòng đợi...</span>
             </div>
-            {players.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-muted-foreground">Chưa có cầu thủ nào. Thêm cầu thủ trước.</p>
-              </div>
+          )}
+          {players.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-muted-foreground">Chưa có cầu thủ nào. Thêm cầu thủ trước.</p>
+            </div>
             ) : (
               <div className="space-y-3">
                 {players.map((player) => (
@@ -351,12 +388,25 @@ export default function TeamBalancerPage() {
               </div>
               <Button
                 onClick={balanceTeams}
-                disabled={selectedPlayers.size < numberOfTeams}
-                className="w-full font-bold"
+                disabled={selectedPlayers.size < numberOfTeams || isBalancing}
+                className={`w-full font-bold text-white transition-all duration-300 shadow-lg shadow-primary/30 ${
+                  isBalancing
+                    ? "bg-gradient-to-r from-primary/60 to-green-500/60 cursor-not-allowed"
+                    : "bg-gradient-to-r from-primary to-green-500 hover:scale-[1.01]"
+                }`}
                 size="lg"
               >
-                <Shuffle className="mr-2 h-5 w-5" />
-                Chia {numberOfTeams} đội ({selectedPlayers.size} cầu thủ)
+                {isBalancing ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Đang chia đội...
+                  </>
+                ) : (
+                  <>
+                    <Shuffle className="mr-2 h-5 w-5" />
+                    Chia {numberOfTeams} đội ({selectedPlayers.size} cầu thủ)
+                  </>
+                )}
               </Button>
             </div>
           </Card>

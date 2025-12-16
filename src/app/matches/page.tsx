@@ -50,16 +50,42 @@ export default function MatchesPage() {
     score2: 0,
     date: new Date().toISOString().split("T")[0],
   })
+  const MAX_LOCAL_MATCHES = 50
+
+  const sanitizePlayerForMatch = (player: Player): Player => ({
+    id: player.id,
+    name: player.name,
+    position: player.position,
+    skillPoints: player.skillPoints,
+    image: undefined,
+    createdAt: player.createdAt || Date.now(),
+  })
+
+  const sanitizeMatch = (match: Match): Match => ({
+    ...match,
+    team1Players: match.team1Players?.map(sanitizePlayerForMatch),
+    team2Players: match.team2Players?.map(sanitizePlayerForMatch),
+  })
+
+  const persistMatches = (matchesToPersist: Match[]) => {
+    try {
+      const sanitized = matchesToPersist.map(sanitizeMatch).slice(0, MAX_LOCAL_MATCHES)
+      localStorage.setItem("football-matches", JSON.stringify(sanitized))
+    } catch (error) {
+      console.warn("Không thể lưu danh sách trận đấu vào localStorage:", error)
+    }
+  }
 
   useEffect(() => {
     const loadMatches = async () => {
       try {
         const response = await fetch('/api/matches');
         if (response.ok) {
-          const matchesData = await response.json();
-          setMatches(matchesData);
+          const matchesData: Match[] = await response.json();
+          const sanitizedData = matchesData.map(sanitizeMatch)
+          setMatches(sanitizedData);
           // Sync to localStorage as backup
-          localStorage.setItem("football-matches", JSON.stringify(matchesData));
+          persistMatches(sanitizedData);
         } else {
           // Fallback to localStorage if API fails
           const stored = localStorage.getItem("football-matches");
@@ -90,8 +116,9 @@ export default function MatchesPage() {
   }, [])
 
   const saveMatches = (updatedMatches: Match[]) => {
-    setMatches(updatedMatches)
-    localStorage.setItem("football-matches", JSON.stringify(updatedMatches))
+    const sanitized = updatedMatches.map(sanitizeMatch)
+    setMatches(sanitized)
+    persistMatches(sanitized)
   }
 
   const addMatch = async () => {
@@ -109,17 +136,18 @@ export default function MatchesPage() {
 
     // Save to Google Sheets
     try {
+      const sanitizedMatch = sanitizeMatch(match)
       const response = await fetch('/api/matches', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(match),
+        body: JSON.stringify(sanitizedMatch),
       });
       
       if (response.ok) {
         // Update local state
-        setMatches([match, ...matches]);
+        saveMatches([match, ...matches]);
         setNewMatch({
           team1: "",
           team2: "",
@@ -131,9 +159,10 @@ export default function MatchesPage() {
         // Reload from Google Sheets to ensure sync
         const reloadResponse = await fetch('/api/matches');
         if (reloadResponse.ok) {
-          const matchesData = await reloadResponse.json();
-          setMatches(matchesData);
-          localStorage.setItem("football-matches", JSON.stringify(matchesData));
+        const matchesData: Match[] = await reloadResponse.json();
+        const sanitizedData = matchesData.map(sanitizeMatch);
+        setMatches(sanitizedData);
+        persistMatches(sanitizedData);
         }
       } else {
         // Fallback to localStorage
@@ -179,21 +208,24 @@ export default function MatchesPage() {
       if (response.ok) {
         // Update local state
         const updatedMatches = matches.filter((m) => m.id !== id);
-        setMatches(updatedMatches);
-        localStorage.setItem("football-matches", JSON.stringify(updatedMatches));
+        const sanitizedUpdated = updatedMatches.map(sanitizeMatch)
+        setMatches(sanitizedUpdated);
+        persistMatches(sanitizedUpdated);
         toast.success('Đã xóa trận đấu', { id: toastId });
         // Reload from Google Sheets to ensure sync
         const reloadResponse = await fetch('/api/matches');
         if (reloadResponse.ok) {
-          const matchesData = await reloadResponse.json();
-          setMatches(matchesData);
-          localStorage.setItem("football-matches", JSON.stringify(matchesData));
+          const matchesData: Match[] = await reloadResponse.json();
+          const sanitizedData = matchesData.map(sanitizeMatch);
+          setMatches(sanitizedData);
+          persistMatches(sanitizedData);
         }
       } else {
         // Fallback to localStorage
         const updatedMatches = matches.filter((m) => m.id !== id);
-        setMatches(updatedMatches);
-        localStorage.setItem("football-matches", JSON.stringify(updatedMatches));
+        const sanitizedUpdated = updatedMatches.map(sanitizeMatch)
+        setMatches(sanitizedUpdated);
+        persistMatches(sanitizedUpdated);
         toast.success('Đã xóa trận đấu (lưu tạm)', { id: toastId });
       }
     } catch (error) {
@@ -201,8 +233,9 @@ export default function MatchesPage() {
       toast.error('Không thể xóa trận đấu');
       // Fallback to localStorage
       const updatedMatches = matches.filter((m) => m.id !== id);
-      setMatches(updatedMatches);
-      localStorage.setItem("football-matches", JSON.stringify(updatedMatches));
+      const sanitizedUpdated = updatedMatches.map(sanitizeMatch)
+      setMatches(sanitizedUpdated);
+      persistMatches(sanitizedUpdated);
     }
   }
 
@@ -211,9 +244,10 @@ export default function MatchesPage() {
       const toastId = toast.loading('Đang làm mới...');
       const response = await fetch('/api/matches');
       if (response.ok) {
-        const matchesData = await response.json();
-        setMatches(matchesData);
-        localStorage.setItem("football-matches", JSON.stringify(matchesData));
+        const matchesData: Match[] = await response.json();
+        const sanitizedData = matchesData.map(sanitizeMatch);
+        setMatches(sanitizedData);
+        persistMatches(sanitizedData);
         toast.success('Đã làm mới danh sách trận đấu', { id: toastId });
       } else {
         toast.error('Không thể làm mới danh sách', { id: toastId });
@@ -336,9 +370,10 @@ export default function MatchesPage() {
     const newWinner = newScore1 > newScore2 ? 1 : newScore1 < newScore2 ? 2 : 0
 
     // Update local state immediately
-    const updatedMatches = matches.map(m => m.id === matchId ? updatedMatch : m)
+    const sanitizedMatch = sanitizeMatch(updatedMatch)
+    const updatedMatches = matches.map(m => m.id === matchId ? sanitizedMatch : m)
     setMatches(updatedMatches)
-    localStorage.setItem("football-matches", JSON.stringify(updatedMatches))
+    persistMatches(updatedMatches)
 
     // Save to Google Sheets
     try {
@@ -348,7 +383,7 @@ export default function MatchesPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updatedMatch),
+        body: JSON.stringify(sanitizedMatch),
       });
 
       if (response.ok) {
@@ -417,58 +452,61 @@ export default function MatchesPage() {
         // Reload from Google Sheets to ensure sync
         const reloadResponse = await fetch('/api/matches');
         if (reloadResponse.ok) {
-          const matchesData = await reloadResponse.json();
-          setMatches(matchesData);
-          localStorage.setItem("football-matches", JSON.stringify(matchesData));
+          const matchesData: Match[] = await reloadResponse.json();
+          const sanitizedData = matchesData.map(sanitizeMatch);
+          setMatches(sanitizedData);
+          persistMatches(sanitizedData);
         }
       } else {
         // Revert on error
         setMatches(matches)
-        localStorage.setItem("football-matches", JSON.stringify(matches))
+        persistMatches(matches)
         toast.error('Không thể cập nhật tỉ số. Vui lòng thử lại.', { id: toastId })
       }
     } catch (error) {
       console.error('Error updating score:', error);
       // Revert on error
       setMatches(matches)
-      localStorage.setItem("football-matches", JSON.stringify(matches))
+      persistMatches(matches)
       toast.error('Không thể cập nhật tỉ số. Vui lòng thử lại.')
     }
   }
 
   return (
-    <div className="min-h-screen py-12 px-4 animate-fade-in">
+    <div className="min-h-screen py-12 px-4 pb-28 animate-fade-in sm:pb-16">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-12 flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"
+          className="mb-10"
         >
-          <div>
-            <h1 className="text-4xl font-black tracking-tight mb-2 bg-gradient-to-r from-primary to-green-400 bg-clip-text text-transparent sm:text-5xl">
-              KẾT QUẢ TRẬN ĐẤU
-            </h1>
-            <p className="text-muted-foreground text-lg">Cập nhật và theo dõi các trận đấu</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap md:justify-end">
-            <Button
-              size="lg"
-              variant="outline"
-              className="w-full font-bold hover:scale-105 transition-transform sm:w-auto"
-              onClick={refreshMatches}
-            >
-              <RefreshCw className="w-5 h-5 mr-2" />
-              Làm mới
-            </Button>
-            <Button
-              size="lg"
-              className="w-full font-bold gradient-primary hover:scale-105 transition-transform shadow-lg sm:w-auto"
-              onClick={() => setIsOpen(true)}
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Thêm trận đấu
-            </Button>
+          <div className="rounded-2xl border border-primary/10 bg-card/60 p-6 text-center shadow-lg backdrop-blur md:flex md:items-center md:justify-between md:text-left">
+            <div>
+              <h1 className="text-3xl font-black tracking-tight mb-2 bg-gradient-to-r from-primary to-green-400 bg-clip-text text-transparent sm:text-4xl">
+                KẾT QUẢ TRẬN ĐẤU
+              </h1>
+              <p className="text-muted-foreground text-base sm:text-lg">Cập nhật và theo dõi các trận đấu mới nhất</p>
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:mt-0 sm:flex-row sm:flex-wrap md:justify-end">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full font-bold hover:scale-105 transition-transform sm:w-auto"
+                onClick={refreshMatches}
+              >
+                <RefreshCw className="w-5 h-5 mr-2" />
+                Làm mới
+              </Button>
+              <Button
+                size="lg"
+                className="w-full font-bold gradient-primary hover:scale-105 transition-transform shadow-lg sm:w-auto"
+                onClick={() => setIsOpen(true)}
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Thêm trận đấu
+              </Button>
+            </div>
           </div>
         </motion.div>
 
@@ -509,6 +547,7 @@ export default function MatchesPage() {
                     value={newMatch.team1}
                     onChange={(e) => setNewMatch({ ...newMatch, team1: e.target.value })}
                     placeholder="Tên đội 1"
+                    className="text-black"
                   />
                 </div>
                 <div>
@@ -518,6 +557,7 @@ export default function MatchesPage() {
                     value={newMatch.team2}
                     onChange={(e) => setNewMatch({ ...newMatch, team2: e.target.value })}
                     placeholder="Tên đội 2"
+                    className="text-black"
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -561,6 +601,7 @@ export default function MatchesPage() {
                     type="date"
                     value={newMatch.date}
                     onChange={(e) => setNewMatch({ ...newMatch, date: e.target.value })}
+                    className="text-black"
                   />
                 </div>
                 <Button 
@@ -598,14 +639,14 @@ export default function MatchesPage() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                 >
-                  <Card className="p-6 gradient-card border hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+                  <Card className="p-6 rounded-2xl border border-primary/10 bg-card/70 shadow-lg transition-all duration-300 hover:border-primary/40">
                     <div className="flex flex-col gap-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(match.date).toLocaleDateString("vi-VN")}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {(match.team1Players || match.team2Players) && (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(match.date).toLocaleDateString("vi-VN")}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {(match.team1Players || match.team2Players) && (
                           <Button 
                             variant="ghost" 
                             size="sm"
@@ -626,7 +667,7 @@ export default function MatchesPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+                    <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
                       <div className="flex w-full flex-1 flex-col items-center text-center sm:items-end sm:text-right">
                         <h3 className="text-2xl font-bold">{match.team1}</h3>
                         {match.team1Players && (
@@ -635,7 +676,7 @@ export default function MatchesPage() {
                           </p>
                         )}
                       </div>
-                      <div className="flex w-full flex-col items-center justify-center gap-2 rounded-lg bg-secondary px-4 py-3 sm:w-auto sm:flex-row sm:gap-4 sm:px-6">
+                      <div className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-primary/20 bg-card/80 px-6 py-4 sm:w-auto sm:flex-row sm:gap-4 sm:px-8">
                         {editingScore === match.id ? (
                           <div className="flex items-center gap-2 flex-wrap justify-center">
                             <Input
@@ -643,7 +684,7 @@ export default function MatchesPage() {
                               min="0"
                               value={editScore.score1}
                               onChange={(e) => setEditScore({ ...editScore, score1: Number.parseInt(e.target.value) || 0 })}
-                              className="w-16 text-center text-2xl font-black"
+                              className="w-16 text-center text-2xl font-black text-black"
                               autoFocus
                             />
                             <span className="text-2xl text-muted-foreground">-</span>
@@ -652,7 +693,7 @@ export default function MatchesPage() {
                               min="0"
                               value={editScore.score2}
                               onChange={(e) => setEditScore({ ...editScore, score2: Number.parseInt(e.target.value) || 0 })}
-                              className="w-16 text-center text-2xl font-black"
+                              className="w-16 text-center text-2xl font-black text-black"
                             />
                             <Button
                               size="icon"

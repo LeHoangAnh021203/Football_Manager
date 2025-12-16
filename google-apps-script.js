@@ -439,6 +439,10 @@ function saveMatch(match) {
       parseInt(match.createdAt) || Date.now()
     ]);
     
+    // Ensure ID column stays as plain text to avoid scientific notation
+    const lastRow = sheet.getLastRow();
+    setCellAsText(sheet, lastRow, 1, match.id || '');
+    
     return { success: true };
   } catch (error) {
     return { success: false, error: error.toString() };
@@ -488,6 +492,7 @@ function updateMatch(match) {
             match.team2Players ? JSON.stringify(match.team2Players) : '',
             parseInt(match.createdAt) || Date.now()
           ]]);
+          setCellAsText(sheet, i + 1, 1, match.id || '');
           return { success: true, message: 'Match updated successfully' };
         } catch (updateError) {
           return { success: false, error: 'Failed to update row: ' + updateError.toString() };
@@ -511,21 +516,32 @@ function updateMatch(match) {
 
 function deleteMatch(matchId) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Matches');
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (!spreadsheet) {
+      return { success: false, error: 'No active spreadsheet found' };
+    }
+    
+    const sheet = spreadsheet.getSheetByName('Matches');
     if (!sheet) {
       return { success: false, error: 'Matches sheet not found' };
+    }
+    
+    const normalizedId = String(matchId || '').trim();
+    if (!normalizedId) {
+      return { success: false, error: 'Match ID is required' };
     }
     
     const data = sheet.getDataRange().getValues();
     
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === matchId) {
+      const rowId = String(data[i][0] || '').trim();
+      if (rowId === normalizedId) {
         sheet.deleteRow(i + 1);
         return { success: true };
       }
     }
     
-    return { success: false, error: 'Match not found' };
+    return { success: false, error: 'Match not found with ID: ' + normalizedId };
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -608,6 +624,16 @@ function saveTeams(teams) {
     return { success: true };
   } catch (error) {
     return { success: false, error: error.toString() };
+  }
+}
+
+function setCellAsText(sheet, row, col, value) {
+  try {
+    const range = sheet.getRange(row, col);
+    range.setNumberFormat('@');
+    range.setValue(String(value || ''));
+  } catch (error) {
+    console.error('Failed to set cell as text:', error);
   }
 }
 
