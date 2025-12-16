@@ -487,7 +487,7 @@ export default function TeamBalancerPage() {
                       </p>
                     </div>
                     <Button
-                      onClick={createMatchFromTeams}
+                      onClick={() => createMatchFromTeams()}
                       className="w-full font-bold"
                       size="lg"
                     >

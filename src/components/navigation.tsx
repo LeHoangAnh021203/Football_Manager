@@ -19,7 +19,7 @@ export function Navigation() {
 
   return (
     <>
-      <nav className="sticky top-0 z-40 hidden border-b border-border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/50 md:block mb-10">
+      <nav className="sticky top-0 z-40 hidden border-b border-border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/50 md:block">
         <div className="mx-auto max-w-7xl px-4">
           <div className="flex h-16 items-center justify-between">
             <Link href="/" className="text-2xl font-black tracking-tight flex items-center justify-center gap-5">

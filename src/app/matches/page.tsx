@@ -37,6 +37,32 @@ interface Match {
   createdAt: number
 }
 
+const MAX_LOCAL_MATCHES = 50
+
+const sanitizePlayerForMatch = (player: Player): Player => ({
+  id: player.id,
+  name: player.name,
+  position: player.position,
+  skillPoints: player.skillPoints,
+  image: undefined,
+  createdAt: player.createdAt || Date.now(),
+})
+
+const sanitizeMatch = (match: Match): Match => ({
+  ...match,
+  team1Players: match.team1Players?.map(sanitizePlayerForMatch),
+  team2Players: match.team2Players?.map(sanitizePlayerForMatch),
+})
+
+const persistMatches = (matchesToPersist: Match[]) => {
+  try {
+    const sanitized = matchesToPersist.map(sanitizeMatch).slice(0, MAX_LOCAL_MATCHES)
+    localStorage.setItem("football-matches", JSON.stringify(sanitized))
+  } catch (error) {
+    console.warn("Không thể lưu danh sách trận đấu vào localStorage:", error)
+  }
+}
+
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([])
   const [isOpen, setIsOpen] = useState(false)
@@ -50,31 +76,6 @@ export default function MatchesPage() {
     score2: 0,
     date: new Date().toISOString().split("T")[0],
   })
-  const MAX_LOCAL_MATCHES = 50
-
-  const sanitizePlayerForMatch = (player: Player): Player => ({
-    id: player.id,
-    name: player.name,
-    position: player.position,
-    skillPoints: player.skillPoints,
-    image: undefined,
-    createdAt: player.createdAt || Date.now(),
-  })
-
-  const sanitizeMatch = (match: Match): Match => ({
-    ...match,
-    team1Players: match.team1Players?.map(sanitizePlayerForMatch),
-    team2Players: match.team2Players?.map(sanitizePlayerForMatch),
-  })
-
-  const persistMatches = (matchesToPersist: Match[]) => {
-    try {
-      const sanitized = matchesToPersist.map(sanitizeMatch).slice(0, MAX_LOCAL_MATCHES)
-      localStorage.setItem("football-matches", JSON.stringify(sanitized))
-    } catch (error) {
-      console.warn("Không thể lưu danh sách trận đấu vào localStorage:", error)
-    }
-  }
 
   useEffect(() => {
     const loadMatches = async () => {
