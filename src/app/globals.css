@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Modern Football-themed color scheme with vibrant gradients */
+:root {
+  --background: 222 47% 11%;
+  --foreground: 0 0% 98%;
+  --card: 222 47% 15%;
+  --card-foreground: 0 0% 98%;
+  --popover: 222 47% 15%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 142 76% 36%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 0 0% 70%;
+  --accent: 142 76% 36%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 217 33% 20%;
+  --input: 217 33% 20%;
+  --ring: 142 76% 36%;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(222 47% 8%) 100%);
+    background-attachment: fixed;
+    color: hsl(var(--foreground));
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+  
+  .animate-slide-down {
+    animation: slideDown 0.5s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out;
+  }
+  
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+  
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(142 76% 36%) 0%, hsl(142 76% 28%) 100%);
+  }
+  
+  .gradient-card {
+    background: linear-gradient(135deg, hsl(222 47% 15%) 0%, hsl(222 47% 12%) 100%);
+  }
+  
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
