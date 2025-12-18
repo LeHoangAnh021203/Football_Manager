@@ -7,7 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Star, Trash2, User, RefreshCw, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Star,
+  Trash2,
+  User,
+  RefreshCw,
+  Loader2,
+  Pencil,
+} from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,6 +43,8 @@ type CropHandleMode =
 export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const DEFAULT_SKILL_POINTS = 5;
   const [newPlayer, setNewPlayer] = useState({
@@ -63,6 +73,7 @@ export default function PlayersPage() {
     },
   });
   const [cropper, setCropper] = useState(createCropperState);
+  const [cropMode, setCropMode] = useState<"add" | "edit">("add");
   const [isDragging, setIsDragging] = useState(false);
   const dragState = useRef({
     active: false,
@@ -162,12 +173,16 @@ export default function PlayersPage() {
     }
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    mode: "add" | "edit"
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
+      setCropMode(mode);
       setCropper({
         ...createCropperState(),
         isOpen: true,
@@ -358,6 +373,7 @@ export default function PlayersPage() {
     cropBoxInteraction.current.active = false;
     setIsDragging(false);
     setCropper(createCropperState());
+    setCropMode("add");
   };
 
   const applyCrop = () => {
@@ -385,7 +401,11 @@ export default function PlayersPage() {
         cropper.mimeType.includes("png") ? "image/png" : "image/jpeg",
         0.92
       );
-      setNewPlayer((prev) => ({ ...prev, image: output }));
+      if (cropMode === "edit") {
+        setEditingPlayer((prev) => (prev ? { ...prev, image: output } : prev));
+      } else {
+        setNewPlayer((prev) => ({ ...prev, image: output }));
+      }
       closeCropper();
     };
     image.src = cropper.src;
@@ -436,8 +456,11 @@ export default function PlayersPage() {
       });
 
       if (response.ok) {
-        // Update local state
-        setPlayers([...players, player]);
+        const responseData = await response.json().catch(() => null);
+        const savedPlayer = (responseData?.player || null) as Player | null;
+        const playerToStore = savedPlayer || player;
+        const updatedPlayers = [...players, playerToStore];
+        await savePlayers(updatedPlayers);
         setNewPlayer({
           name: "",
           position: "",
@@ -474,6 +497,55 @@ export default function PlayersPage() {
         image: "",
       });
       setIsOpen(false);
+    }
+  };
+
+  const startEditingPlayer = (player: Player) => {
+    setEditingPlayer({ ...player });
+    setIsEditOpen(true);
+  };
+
+  const cancelEditingPlayer = () => {
+    setIsEditOpen(false);
+    setEditingPlayer(null);
+  };
+
+  const updatePlayerDetails = async () => {
+    if (!editingPlayer) return;
+    if (!editingPlayer.name || !editingPlayer.position) {
+      toast.error("Vui lòng điền đầy đủ thông tin");
+      return;
+    }
+
+    try {
+      const toastId = toast.loading("Đang cập nhật cầu thủ...");
+      const response = await fetch("/api/players", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editingPlayer),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (response.ok) {
+        const updatedPlayer = (payload?.player || editingPlayer) as Player;
+        const updatedPlayers = players.map((player) =>
+          player.id === updatedPlayer.id ? updatedPlayer : player
+        );
+        await savePlayers(updatedPlayers);
+        toast.success(`Đã cập nhật cầu thủ ${updatedPlayer.name}`, {
+          id: toastId,
+        });
+        cancelEditingPlayer();
+      } else {
+        const errorMessage =
+          payload?.error || payload?.message || "Không thể cập nhật cầu thủ";
+        toast.error(errorMessage, { id: toastId });
+      }
+    } catch (error) {
+      console.error("Error updating player:", error);
+      toast.error("Không thể cập nhật cầu thủ");
     }
   };
 
@@ -726,7 +798,7 @@ export default function PlayersPage() {
                         id="image"
                         type="file"
                         accept="image/*"
-                        onChange={handleImageUpload}
+                        onChange={(event) => handleImageUpload(event, "add")}
                         className="cursor-pointer"
                       />
                       {newPlayer.image &&
@@ -757,6 +829,126 @@ export default function PlayersPage() {
                   >
                     Thêm cầu thủ
                   </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit modal */}
+        <AnimatePresence>
+          {isEditOpen && editingPlayer && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center"
+            >
+              <div
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                onClick={cancelEditingPlayer}
+              />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ type: "spring", duration: 0.3 }}
+                className="relative z-50 gradient-card border rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold">Chỉnh sửa cầu thủ</h2>
+                  <button
+                    onClick={cancelEditingPlayer}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-name">Tên cầu thủ</Label>
+                    <Input
+                      className="text-black"
+                      id="edit-name"
+                      value={editingPlayer.name}
+                      onChange={(e) =>
+                        setEditingPlayer((prev) =>
+                          prev ? { ...prev, name: e.target.value } : prev
+                        )
+                      }
+                      placeholder="Nguyễn Văn A"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-position">Vị trí</Label>
+                    <select
+                      id="edit-position"
+                      value={editingPlayer.position}
+                      onChange={(e) =>
+                        setEditingPlayer((prev) =>
+                          prev ? { ...prev, position: e.target.value } : prev
+                        )
+                      }
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
+                    >
+                      <option value="" disabled>
+                        -- Chọn vị trí --
+                      </option>
+                      <option value="ST">ST</option>
+                      <option value="CM">CM</option>
+                      <option value="CB">CB</option>
+                      <option value="GK">GK</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-image">Ảnh cầu thủ</Label>
+                    <div className="space-y-2">
+                      <Input
+                        id="edit-image"
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => handleImageUpload(event, "edit")}
+                        className="cursor-pointer"
+                      />
+                      {editingPlayer.image &&
+                        (editingPlayer.image.startsWith("data:") ||
+                          editingPlayer.image.startsWith("http://") ||
+                          editingPlayer.image.startsWith("https://")) && (
+                          <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="mt-2"
+                          >
+                            <Image
+                              src={editingPlayer.image}
+                              alt={editingPlayer.name}
+                              width={80}
+                              height={80}
+                              className="w-20 h-20 object-cover rounded-lg border"
+                              unoptimized={editingPlayer.image.startsWith(
+                                "data:"
+                              )}
+                              loading="lazy"
+                            />
+                          </motion.div>
+                        )}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={cancelEditingPlayer}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      className="flex-1 font-bold gradient-primary"
+                      onClick={updatePlayerDetails}
+                    >
+                      Lưu thay đổi
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
@@ -946,6 +1138,7 @@ export default function PlayersPage() {
                   player={player}
                   index={index}
                   onDelete={() => deletePlayer(player.id)}
+                  onEdit={() => startEditingPlayer(player)}
                 />
               ))}
             </AnimatePresence>
@@ -960,9 +1153,10 @@ interface PlayerCardProps {
   player: Player;
   index: number;
   onDelete: () => void;
+  onEdit: () => void;
 }
 
-const PlayerCard = ({ player, index, onDelete }: PlayerCardProps) => {
+const PlayerCard = ({ player, index, onDelete, onEdit }: PlayerCardProps) => {
   const formattedSkill = player.skillPoints.toString().padStart(2, "0");
   const hasImage =
     player.image &&
@@ -999,7 +1193,6 @@ const PlayerCard = ({ player, index, onDelete }: PlayerCardProps) => {
         <div className="absolute inset-0 z-10 flex flex-col px-5 py-6 text-[#fbeed3]">
           <div className="flex flex-col items-center gap-4 text-xs font-semibold tracking-[0.35em] uppercase text-[#fddc9a] sm:flex-row sm:justify-between ">
             <div className="flex flex-col items-center text-center gap-2 sm:items-start">
-              
               <Image
                 src="/FWF%20FC@4x.png"
                 alt="logo câu lạc bộ"
@@ -1009,14 +1202,24 @@ const PlayerCard = ({ player, index, onDelete }: PlayerCardProps) => {
                 priority={false}
               />
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onDelete}
-              className="h-9 w-9 rounded-full bg-black/30 hover:bg-destructive/40 text-[#fddc9a] hover:text-white transition-colors self-end sm:self-auto"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-2 self-end sm:self-auto">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onEdit}
+                className="h-9 w-9 rounded-full bg-black/30 hover:bg-primary/50 text-[#fddc9a] hover:text-white transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onDelete}
+                className="h-9 w-9 rounded-full bg-black/30 hover:bg-destructive/40 text-[#fddc9a] hover:text-white transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           <div className=" flex w-full flex-col items-center gap-4 -mt-0 sm:mt-2">

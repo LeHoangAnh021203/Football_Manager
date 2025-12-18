@@ -31,11 +31,11 @@ export async function POST(request: NextRequest) {
       skillPoints: hasValidSkillPoints ? parsedSkillPoints : 5,
     }
     
-    const success = await savePlayerToSheets(normalizedPlayer)
-    console.log('Save result:', success)
+    const savedPlayer = await savePlayerToSheets(normalizedPlayer)
+    console.log('Save result:', savedPlayer)
     
-    if (success) {
-      return NextResponse.json({ message: 'Player saved successfully' })
+    if (savedPlayer) {
+      return NextResponse.json({ message: 'Player saved successfully', player: savedPlayer })
     } else {
       return NextResponse.json({ error: 'Failed to save player to Google Sheets' }, { status: 500 })
     }
@@ -63,17 +63,15 @@ export async function PUT(request: NextRequest) {
     const result = await updatePlayerInSheets(player)
     console.log('Update result:', result)
     
-    if (result === true) {
-      return NextResponse.json({ message: 'Player updated successfully' })
-    } else {
-      const errorMsg = typeof result === 'object' && result?.error 
-        ? result.error 
-        : 'Failed to update player in Google Sheets'
+    if (!result || 'error' in result) {
+      const errorMsg = result?.error || 'Failed to update player in Google Sheets'
       return NextResponse.json({ 
         error: errorMsg,
-        details: typeof result === 'object' ? result : undefined
+        details: result
       }, { status: 500 })
     }
+    
+    return NextResponse.json({ message: 'Player updated successfully', player: result })
   } catch (error: any) {
     console.error('Error in PUT /api/players:', error)
     return NextResponse.json({ 

@@ -125,35 +125,42 @@ export const getPlayersFromSheets = async (): Promise<Player[]> => {
 }
 
 // Lưu cầu thủ vào Google Sheets
-export const savePlayerToSheets = async (player: Player): Promise<boolean> => {
+export const savePlayerToSheets = async (player: Player): Promise<Player | null> => {
   try {
     console.log('savePlayerToSheets called with:', player)
     const result = await callGoogleScript('savePlayer', player)
     console.log('savePlayer result:', result)
     
     if (result && result.success) {
-      return true
+      if (result.player) {
+        return result.player as Player
+      }
+      // In case Apps Script didn't return the player object, fall back to original payload
+      return player
     } else {
       console.error('savePlayer returned failure:', result)
-      return false
+      return null
     }
   } catch (error: any) {
     console.error('Error saving player to sheets:', error)
     console.error('Error message:', error?.message)
     console.error('Error stack:', error?.stack)
-    return false
+    return null
   }
 }
 
 // Cập nhật cầu thủ trong Google Sheets
-export const updatePlayerInSheets = async (player: Player): Promise<boolean | { error: string, searchedIds?: string[] }> => {
+export const updatePlayerInSheets = async (player: Player): Promise<Player | { error: string, searchedIds?: string[] }> => {
   try {
     console.log('updatePlayerInSheets called with:', { id: player.id, name: player.name, skillPoints: player.skillPoints })
     const result = await callGoogleScript('updatePlayer', player)
     console.log('updatePlayer result:', result)
     
     if (result && result.success) {
-      return true
+      if (result.player) {
+        return result.player as Player
+      }
+      return player
     } else {
       const errorMsg = result?.error || 'Unknown error from Google Script'
       console.error('updatePlayer returned failure:', errorMsg)
